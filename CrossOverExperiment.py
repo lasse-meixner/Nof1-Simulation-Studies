@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.stats import ttest_ind, ttest_1samp
+from scipy.stats import ttest_ind, ttest_1samp, t, norm
 from tqdm import tqdm
 from statsmodels.api import MixedLM
 
@@ -54,9 +54,6 @@ class CrossOverExperiment():
         }
         self._isfit = False
     
-    def generate_data(self):
-        pass
-
     @property
     def subjects_(self):
         return self.subjects
@@ -85,7 +82,7 @@ class CrossOverExperiment():
         matrix = np.vstack([first,rest])
         return matrix
     
-    def generate_data(self, return_for_t=True, **kwargs):
+    def generate_data(self, return_for_t=True):
         """Generate data for one instance of the design. Can be called in loop to estimate experiment statistics.
 
         Args:
@@ -106,21 +103,23 @@ class CrossOverExperiment():
         # random subject intercept
         alpha = np.random.normal(loc=0,scale=self.alpha_sd,size=self.subjects).repeat(self.periods).reshape(-1,2)
         # select correct idiosyncratic error structure
-        if kwargs.get("type")=="ar1":
-            epsilon = self.gen_ar1_error(self.subjects,self.periods,kwargs.get("rho")).reshape(-1,2)
-        elif kwargs.get("type")=="compound":
-            epsilon = self.gen_compound_error(self.subjects,self.periods,kwargs.get("rho")).reshape(-1,2)
+        if self.params.get("type")=="ar1":
+            epsilon = self.gen_ar1_error(self.subjects,self.periods,self.params.get("rho")).reshape(-1,2)
+        elif self.params.get("type")=="compound":
+            epsilon = self.gen_compound_error(self.subjects,self.periods,self.params.get("rho")).reshape(-1,2)
         else:
             epsilon = np.random.normal(loc=0,scale=self.epsilon_sd,size=self.subjects*self.periods).reshape(-1,2)
-        # produce outcome
-        y = c * self.base_effect + T*self.mu + t*self.tau + cO*self.carryover + alpha + epsilon
+        # produce outcome for both h0 and h1
+        y0 = c * self.base_effect + t*self.tau + alpha + epsilon # without Treatment effect (and carryover)
+        y1 = c * self.base_effect + T*self.mu + t*self.tau + cO*self.carryover + alpha + epsilon
         # for t test: check for which block treatment has been allocated first or second period, then subtract accordingly
         if return_for_t:
             B_T = T[:,1] - T[:,0] # gives 1 if B_T, -1 if T_B
-            diffs = (y[:,1]-y[:,0]) * B_T
-            return diffs
+            diffs0 = (y0[:,1]-y0[:,0]) * B_T
+            diffs1 = (y1[:,1]-y1[:,0]) * B_T
+            return diffs0, diffs1
         else:
-            return y.ravel(),subj.ravel(),T.ravel(),t.ravel(),cO.ravel() #ypTto
+            return (y0.ravel(),y1.ravel()),subj.ravel(),T.ravel(),t.ravel(),cO.ravel() #(y0,y1)pTto
 
     def run_t_test(self,iterations):
         """Loops over experimental design data and computes the ttest pvalue over the paired differences.
@@ -129,54 +128,88 @@ class CrossOverExperiment():
             iterations (int): Number of iterations in the loop
         """
         self.p_values = []
+        self.statistics = []
+        self.estimates = []
         for i in tqdm(range(iterations)):
-            diffs = self.generate_data(return_for_t=True,**self.params)
-            p = ttest_1samp(diffs,0,alternative="two-sided").pvalue
-            self.p_values.append(p)
+            d0,d1 = self.generate_data(return_for_t=True)
+            t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
+            t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
+            self.p_values.append(p0)
+            self.statistics.append(t_stat1)
+            self.estimates.append(d1.mean())
         self._lastfit = "t_test"
         self._isfit = True
 
     def run_mixed_linear_model(self,iterations):
+        """
+        This method does not work for ar1 and clustered errors since statsmodels has dogshit support for mixedlm, and is bugged around cov_type. This only runs without an error in the 'else'.
+        We have to see how to replace this. Almost impossible to believe, but there seems to be no package for computing mixed linear models with autoregressive/compound symmetry 
+        residual structure in Python. 
+        Unless we 
+        1) want to write that ourselves, 
+        the best alternative would be to 
+        2) use R nlme::lme. Then, we can either think about 
+            a) a drop-in replacement that works without our loop (pymer4?), i.e. replacing the content of this function with references to R,
+            b) or simply move the mixed linear model estimations to another R script and leave this here for the t-test only.
+        If there is a way to easily achieve 2a - I would be very happy.
+        Otherwise, I guess we resort to 2b. This would make the code-base a lot less elegant.
+        """ 
         self.p_values = []
-        if self.params.get("type")=="ar1":
+        self.statistics = []
+        self.estimates = []
+        if self.error_type=="ar1":
+            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
             for i in tqdm(range(iterations)):
-                y,sub,T,t,cO = self.generate_data(False,**self.params)
-                mlm = MixedLM(y,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="hac-panel",cov_kwds={"groups":sub,"maxlags":1}).pvalues[1]
-                self.p_values.append(p)
+                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="hac-panel",cov_kwds={"groups":sub,"maxlags":1}).pvalues[1]
+                self.p_values.append(mlm0.pvalues[1])
 
-        elif self.params.get("type")=="compound":
+        elif self.error_type=="compound":
+            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
             for i in tqdm(range(iterations)):
-                y,sub,T,t,cO = self.generate_data(False,**self.params)
-                p = MixedLM(y,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="clustered", cov_kewds={"groups":sub}).pvalues[1]
-                self.p_values.append(p)
+                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="clustered", cov_kewds={"groups":sub}).pvalues[1]
+                self.p_values.append(mlm0.pvalues[1])
 
         else:
+            # only this works
             for i in tqdm(range(iterations)):
-                y,sub,T,t,cO = self.generate_data(False,**self.params)
-                p = MixedLM(y,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit().pvalues[1]
-                self.p_values.append(p)
+                (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
+                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
+                mlm1 = MixedLM(y1,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
+                self.p_values.append(mlm0.pvalues[1])
+                self.statistics.append(mlm1.tvalues[1])
+                self.estimates.append(mlm1.fe_params[1])
         self._lastfit = "MLM"
         self._isfit=True
 
 
-    def get_p_ratio(self,alpha):
+    def get_results(self,conf=0.95):
         """Requires self.run_t_test() to be called prior in order for self.pvalues to be set.
 
         Args:
-            alpha (_type_): Critical level
+            conf (float): Critical level
 
         Returns:
-            _type_: Ratio of pvalues below critical level
+            dict: Results dictionary
         """
         assert self._isfit==True
-        return (np.array(self.p_values)<alpha).sum()/len(self.p_values)
+        assert conf>0 and conf<1
+
+        critical_t = t.ppf(conf,self.subjects*(self.periods-1)) if self.periods>2 else t.ppf(conf,self.subjects-1) # df = n(k-1) (see Senn 2017)
+
+        p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
+        bias = np.array(self.estimates).mean() - self.mu
+        mse = ((np.array(self.estimates) - self.mu)**2).mean()
+        power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
+        return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
+    
+
         
 
 
 
 class RCT():
     # generate docstring and give documentation of how the params in the kwargs have to be passed
-    def __init__(self,subjects,**kwargs):
+    def __init__(self,subjects,base_effect=2, mu=0, alpha_sd=2, epsilon_sd=1,**kwargs):
         """Initialize RCT design with arg: subjects.
 
         Args:
@@ -188,7 +221,20 @@ class RCT():
         if subjects%2!=0:
             raise ValueError("Pass even number of subjects")
         self.subjects = subjects
-        self.params = dict(kwargs)
+        self.base_effect = base_effect
+        self.mu = mu
+        self.alpha_sd = alpha_sd
+        self.epsilon_sd = epsilon_sd
+        self.residual_sd = np.sqrt(alpha_sd**2 + epsilon_sd**2) # alpha and epsilon independent
+        self.params = {
+            "Subjects":self.subjects,
+            "Base Effect":self.base_effect,
+            "Mu":self.mu,
+            "Alpha Standard Deviation":self.alpha_sd,
+            "Epsilon Standard Deviation":self.epsilon_sd,
+            **kwargs
+        }
+        self._isfit = False
 
 
     @property
@@ -200,20 +246,21 @@ class RCT():
         return self.params
 
 
-    def generate_data(self,**kwargs):
+    def generate_data(self):
         """Generate data for one instance of the design. Can be called in loop to estimate experiment statistics.
 
         Returns:
             tuple: outcome vector of treated, outcome vector of untreated
         """
-        c = np.ones(self.subjects) * kwargs.get("base_effect")
+        c = np.ones(self.subjects) * self.base_effect
         T = np.hstack([np.ones(int(self.subjects/2)),np.zeros(int(self.subjects/2))])
-        alpha = np.random.normal(loc=0,scale=kwargs.get("alpha_sd"),size=self.subjects)
-        epsilon = np.random.normal(loc=0,scale=kwargs.get("epsilon_sd"),size=self.subjects)
-        y = c + kwargs.get("mu")*T + alpha + epsilon
-        treated = y[T==1]
-        untreated = y[T==0]
-        return treated, untreated
+        alpha = np.random.normal(loc=0,scale=self.alpha_sd,size=self.subjects)
+        epsilon = np.random.normal(loc=0,scale=self.epsilon_sd,size=self.subjects)
+        y0 = c + alpha + epsilon
+        y1 = c + self.mu*T + alpha + epsilon
+        diffs0 = y0[T==1] - y0[T==0]
+        diffs1 = y1[T==1] - y1[T==0]
+        return diffs0,diffs1
 
     def run_t_test(self,iterations):
         """Loops over experimental design data and computes the ttest pvalue over the independent samples.
@@ -221,22 +268,37 @@ class RCT():
         Args:
             iterations (int): Number of iterations in the loop
         """
-        self.pvalues = []
+        self.p_values = []
+        self.statistics = []
+        self.estimates = []
         for i in tqdm(range(iterations)):
-            treated, untreated = self.generate_data(**self.params)
-            p = ttest_ind(treated,untreated,equal_var=False,alternative="two-sided").pvalue
-            self.pvalues.append(p)
+            d0,d1 = self.generate_data()
+            t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
+            t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
+            self.p_values.append(p0)
+            self.statistics.append(t_stat1)
+            self.estimates.append(d1.mean())
+        self._isfit = True
     
-    def get_p_ratio(self,alpha):
+    def get_results(self,conf=0.95):
         """Requires self.run_t_test() to be called prior in order for self.pvalues to be set.
 
         Args:
-            alpha (_type_): Critical level
+            conf (float): Critical level
 
         Returns:
-            _type_: Ratio of pvalues below critical level
+            dict: Results dictionary
         """
-        return (np.array(self.pvalues)<alpha).sum()/len(self.pvalues)
+        assert self._isfit==True
+        assert conf>0 and conf<1
+
+        critical_t = t.ppf(conf,self.subjects-2) # df 
+
+        p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
+        bias = np.array(self.estimates).mean() - self.mu
+        mse = ((np.array(self.estimates) - self.mu)**2).mean()
+        power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
+        return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
 
 
         
