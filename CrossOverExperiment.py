@@ -103,10 +103,10 @@ class CrossOverExperiment():
         # random subject intercept
         alpha = np.random.normal(loc=0,scale=self.alpha_sd,size=self.subjects).repeat(self.periods).reshape(-1,2)
         # select correct idiosyncratic error structure
-        if self.params.get("type")=="ar1":
-            epsilon = self.gen_ar1_error(self.subjects,self.periods,self.params.get("rho")).reshape(-1,2)
-        elif self.params.get("type")=="compound":
-            epsilon = self.gen_compound_error(self.subjects,self.periods,self.params.get("rho")).reshape(-1,2)
+        if self.error_type=="ar1":
+            epsilon = self.gen_ar1_error(self.subjects,self.periods,self.params.get("rho",0.5)).reshape(-1,2)
+        elif self.error_type=="compound":
+            epsilon = self.gen_compound_error(self.subjects,self.periods,self.params.get("rho",0.5)).reshape(-1,2)
         else:
             epsilon = np.random.normal(loc=0,scale=self.epsilon_sd,size=self.subjects*self.periods).reshape(-1,2)
         # produce outcome for both h0 and h1
