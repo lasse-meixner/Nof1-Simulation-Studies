@@ -158,16 +158,18 @@ class CrossOverExperiment():
         self.statistics = []
         self.estimates = []
         if self.error_type=="ar1":
-            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-            for i in tqdm(range(iterations)):
-                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="hac-panel",cov_kwds={"groups":sub,"maxlags":1}).pvalues[1]
-                self.p_values.append(mlm0.pvalues[1])
+            raise ValueError("This is no supported by statsmodels.")
+            # (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
+            # for i in tqdm(range(iterations)):
+            #     mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="hac-panel",cov_kwds={"groups":sub,"maxlags":1}).pvalues[1]
+            #     self.p_values.append(mlm0.pvalues[1])
 
         elif self.error_type=="compound":
-            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-            for i in tqdm(range(iterations)):
-                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="clustered", cov_kewds={"groups":sub}).pvalues[1]
-                self.p_values.append(mlm0.pvalues[1])
+            raise ValueError("This is not supported by statsmodels.")
+            # (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
+            # for i in tqdm(range(iterations)):
+            #     mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="clustered", cov_kewds={"groups":sub}).pvalues[1]
+            #     self.p_values.append(mlm0.pvalues[1])
 
         else:
             # only this works
