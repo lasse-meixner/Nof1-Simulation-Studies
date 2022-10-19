@@ -1,5 +1,4 @@
-library(nlme)
-
+ar1_model = """library(nlme)
 
 ar1_model = function(
   y0,y1,sub,T,t,c0
@@ -15,4 +14,4 @@ ar1_model = function(
   t1_value <- summary(m1)$tTable[2,4]
   fe1_value <- summary(m1)$tTable[2,1]
   return(c(p0_value,t1_value,fe1_value))
-}
+}"""
