@@ -199,8 +199,8 @@ class CrossOverExperiment():
         self.statistics = []
         self.estimates = []
         if self.error_type=="ar1":
-            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
             for i in tqdm(range(iterations)):
+                (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
                 p0,t0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
                 self.p_values.append(p0)
                 self.null_statistics.append(t0)
