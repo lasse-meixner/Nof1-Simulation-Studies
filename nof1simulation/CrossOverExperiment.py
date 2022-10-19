@@ -3,6 +3,11 @@ from scipy.stats import ttest_1samp, t
 from tqdm import tqdm
 from statsmodels.api import MixedLM
 
+import rpy2
+from rpy2.robjects.packages import STAP
+import rpy2.robjects.numpy2ri
+rpy2.robjects.numpy2ri.activate()
+
 # R Objects
 ar1_model_r = """
 library(nlme)
@@ -22,6 +27,8 @@ ar1_model = function(
   fe1_value <- summary(m1)$tTable[2,1]
   return(c(p0_value,t1_value,fe1_value))
 }"""
+
+ar1_model = STAP(ar1_model_r, "ar1_model") # installs R script as package, use: ar1_model.ar1_model(y0,y1,sub,T,t,c0)
 
 class CrossOverExperiment():
     #
@@ -159,38 +166,30 @@ class CrossOverExperiment():
         self._isfit = True
 
     def run_mixed_linear_model(self,iterations):
+        """Loops over experimental design data and computes MLM estimates.
+
+        Args:
+            iterations (int): Number of iterations in the loop
         """
-        This method does not work for ar1 and clustered errors since statsmodels has dogshit support for mixedlm, and is bugged around cov_type. This only runs without an error in the 'else'.
-        We have to see how to replace this. Almost impossible to believe, but there seems to be no package for computing mixed linear models with autoregressive/compound symmetry 
-        residual structure in Python. 
-        Unless we 
-        1) want to write that ourselves, 
-        the best alternative would be to 
-        2) use R nlme::lme. Then, we can either think about 
-            a) a drop-in replacement that works without our loop (pymer4?), i.e. replacing the content of this function with references to R,
-            b) or simply move the mixed linear model estimations to another R script and leave this here for the t-test only.
-        If there is a way to easily achieve 2a - I would be very happy.
-        Otherwise, I guess we resort to 2b. This would make the code-base a lot less elegant.
-        """ 
+    
         self.p_values = []
         self.statistics = []
         self.estimates = []
         if self.error_type=="ar1":
-            raise ValueError("This is no supported by statsmodels.")
-            # (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-            # for i in tqdm(range(iterations)):
-            #     mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="hac-panel",cov_kwds={"groups":sub,"maxlags":1}).pvalues[1]
-            #     self.p_values.append(mlm0.pvalues[1])
+            (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
+            for i in tqdm(range(iterations)):
+                p0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
+                self.p_values.append(p0)
+                self.statistics.append(t1)
+                self.estimates.append(fe1)
 
         elif self.error_type=="compound":
-            raise ValueError("This is not supported by statsmodels.")
+            raise ValueError("To be implemented.")
             # (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
             # for i in tqdm(range(iterations)):
-            #     mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit(cov_type="clustered", cov_kewds={"groups":sub}).pvalues[1]
-            #     self.p_values.append(mlm0.pvalues[1])
 
         else:
-            # only this works
+            print("WARNING:\n Still running with statsmodels.")
             for i in tqdm(range(iterations)):
                 (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
                 mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
