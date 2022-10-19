@@ -27,7 +27,7 @@ try:
     t0_value <- summary(m0)$tTable[2,4]
     t1_value <- summary(m1)$tTable[2,4]
     fe1_value <- summary(m1)$tTable[2,1]
-    return(c(p0_value,t1_value,fe1_value))
+    return(c(p0_value,t0_value,t1_value,fe1_value))
     }"""
 
     ar1_model = STAP(ar1_model_r, "ar1_model") # installs R script as package, use: ar1_model.ar1_model(y0,y1,sub,T,t,c0)
@@ -220,6 +220,7 @@ class CrossOverExperiment():
                 mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
                 mlm1 = MixedLM(y1,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
                 self.p_values.append(mlm0.pvalues[1])
+                self.null_statistics.append(mlm0.tvalues[1])
                 self.statistics.append(mlm1.tvalues[1])
                 self.estimates.append(mlm1.fe_params[1])
                 self._lastfit = "MLM"
