@@ -15,3 +15,4 @@ ar1_model = function(
   fe1_value <- summary(m1)$tTable[2,1]
   return(c(p0_value,t1_value,fe1_value))
 }"""
+
