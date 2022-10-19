@@ -3,32 +3,40 @@ from scipy.stats import ttest_1samp, t
 from tqdm import tqdm
 from statsmodels.api import MixedLM
 
-import rpy2
-from rpy2.robjects.packages import STAP
-import rpy2.robjects.numpy2ri
-rpy2.robjects.numpy2ri.activate()
+try:
+    import rpy2
+    from rpy2.robjects.packages import STAP
+    import rpy2.robjects.numpy2ri
+    rpy2.robjects.numpy2ri.activate()
 
-# R Objects
-ar1_model_r = """
-library(nlme)
+    # R Objects
+    ar1_model_r = """
+    library(nlme)
 
-ar1_model = function(
-  y0,y1,sub,T,t,c0
-){
-  y0 <- as.vector(y0)
-  y1 <- as.vector(y1)
-  sub <- as.vector(sub)
-  t <- as.vector(t)
-  c0 <- as.vector(c0)
-  m0 <- nlme::lme(y0 ~ T + t + c0, random = ~ 1 | sub, correlation = corAR1( form = ~ 1 | sub))
-  m1 <- nlme::lme(y1 ~ T + t + c0, random = ~ 1 | sub, correlation = corAR1( form = ~ 1 | sub))
-  p0_value <- summary(m0)$tTable[2,5]
-  t1_value <- summary(m1)$tTable[2,4]
-  fe1_value <- summary(m1)$tTable[2,1]
-  return(c(p0_value,t1_value,fe1_value))
-}"""
+    ar1_model = function(
+    y0,y1,sub,T,t,c0
+    ){
+    y0 <- as.vector(y0)
+    y1 <- as.vector(y1)
+    sub <- as.vector(sub)
+    t <- as.vector(t)
+    c0 <- as.vector(c0)
+    m0 <- nlme::lme(y0 ~ T + t + c0, random = ~ 1 | sub, correlation = corAR1( form = ~ 1 | sub))
+    m1 <- nlme::lme(y1 ~ T + t + c0, random = ~ 1 | sub, correlation = corAR1( form = ~ 1 | sub))
+    p0_value <- summary(m0)$tTable[2,5]
+    t0_value <- summary(m0)$tTable[2,4]
+    t1_value <- summary(m1)$tTable[2,4]
+    fe1_value <- summary(m1)$tTable[2,1]
+    return(c(p0_value,t1_value,fe1_value))
+    }"""
 
-ar1_model = STAP(ar1_model_r, "ar1_model") # installs R script as package, use: ar1_model.ar1_model(y0,y1,sub,T,t,c0)
+    ar1_model = STAP(ar1_model_r, "ar1_model") # installs R script as package, use: ar1_model.ar1_model(y0,y1,sub,T,t,c0)
+
+except:
+    print("rpy2 not installed in Environment. Proceed with limited capabilities.")
+
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class CrossOverExperiment():
     #
@@ -106,6 +114,18 @@ class CrossOverExperiment():
         rest = np.repeat(first,periods-1,axis=0)*rho + np.random.normal(0,np.sqrt(1-(rho**2)),(periods-1,subjects))
         matrix = np.vstack([first,rest])
         return matrix
+
+    def get_critical_value(self,conf):
+        """Get critical value for t distribution
+
+        Args:
+            conf (float): Type I error
+
+        Returns:
+            float: critical value for H0
+        """
+        critical_t = t.ppf(conf,self.subjects*(self.periods-1)) if self.periods>2 else t.ppf(conf,self.subjects-1) # df = n(k-1) (see Senn 2017)
+        return critical_t
     
     def generate_data(self, return_for_t=True):
         """Generate data for one instance of the design. Can be called in loop to estimate experiment statistics.
@@ -153,6 +173,7 @@ class CrossOverExperiment():
             iterations (int): Number of iterations in the loop
         """
         self.p_values = []
+        self.null_statistics = []
         self.statistics = []
         self.estimates = []
         for i in tqdm(range(iterations)):
@@ -160,6 +181,7 @@ class CrossOverExperiment():
             t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
             t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
             self.p_values.append(p0)
+            self.null_statistics.append(t_stat0)
             self.statistics.append(t_stat1)
             self.estimates.append(d1.mean())
         self._lastfit = "t_test"
@@ -173,15 +195,18 @@ class CrossOverExperiment():
         """
     
         self.p_values = []
+        self.null_statistics = []
         self.statistics = []
         self.estimates = []
         if self.error_type=="ar1":
             (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
             for i in tqdm(range(iterations)):
-                p0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
+                p0,t0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
                 self.p_values.append(p0)
+                self.null_statistics.append(t0)
                 self.statistics.append(t1)
                 self.estimates.append(fe1)
+            self._lastfit = "MLM_ar1"
 
         elif self.error_type=="compound":
             raise ValueError("To be implemented.")
@@ -197,12 +222,12 @@ class CrossOverExperiment():
                 self.p_values.append(mlm0.pvalues[1])
                 self.statistics.append(mlm1.tvalues[1])
                 self.estimates.append(mlm1.fe_params[1])
-        self._lastfit = "MLM"
+                self._lastfit = "MLM"
         self._isfit=True
 
 
     def get_results(self,conf=0.95):
-        """Requires self.run_t_test() to be called prior in order for self.pvalues to be set.
+        """Requires prior fitting.
 
         Args:
             conf (float): Critical level
@@ -213,7 +238,8 @@ class CrossOverExperiment():
         assert self._isfit==True
         assert conf>0 and conf<1
 
-        critical_t = t.ppf(conf,self.subjects*(self.periods-1)) if self.periods>2 else t.ppf(conf,self.subjects-1) # df = n(k-1) (see Senn 2017)
+        #get df
+        critical_t = self.get_critical_value(conf=conf)
 
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
@@ -221,6 +247,11 @@ class CrossOverExperiment():
         power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
         return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
     
+    def plot_results(self,conf=0.95,**kwargs):
+        f = sns.displot(self.null_statistics,**kwargs)
+        plt.axvline(x=self.get_critical_value(conf),color="red",ls="--")
+        plt.axvline(x=-self.get_critical_value(conf),color="red",ls="--")
+        return f
 
         
 
