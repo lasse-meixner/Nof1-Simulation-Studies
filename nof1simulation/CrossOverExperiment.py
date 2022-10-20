@@ -203,7 +203,7 @@ class CrossOverExperiment():
             self.null_statistics.append(t_stat0)
             self.statistics.append(t_stat1)
             self.estimates.append(d1.mean())
-        self._lastfit = "t_test"
+        self._lastfit = "t_paired"
         self._isfit = True
 
     def run_mixed_linear_model(self,iterations):
@@ -350,6 +350,7 @@ class RCT():
             self.p_values.append(p0)
             self.statistics.append(t_stat1)
             self.estimates.append(d1.mean())
+        self._lastfit = "t_two_sample"
         self._isfit = True
     
     def get_results(self,conf=0.95):
