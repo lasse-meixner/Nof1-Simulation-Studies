@@ -28,7 +28,26 @@ try:
     t1_value <- summary(m1)$tTable[2,4]
     fe1_value <- summary(m1)$tTable[2,1]
     return(c(p0_value,t0_value,t1_value,fe1_value))
-    }"""
+    }
+    
+    simple_model = function(
+    y0,y1,sub,T,t,c0
+    ){
+    y0 <- as.vector(y0)
+    y1 <- as.vector(y1)
+    sub <- as.vector(sub)
+    t <- as.vector(t)
+    c0 <- as.vector(c0)
+    m0 <- nlme::lme(y0 ~ T + t + c0, random = ~ 1 | sub)
+    m1 <- nlme::lme(y1 ~ T + t + c0, random = ~ 1 | sub)
+    p0_value <- summary(m0)$tTable[2,5]
+    t0_value <- summary(m0)$tTable[2,4]
+    t1_value <- summary(m1)$tTable[2,4]
+    fe1_value <- summary(m1)$tTable[2,1]
+    return(c(p0_value,t0_value,t1_value,fe1_value))
+    }
+    """
+
 
     ar1_model = STAP(ar1_model_r, "ar1_model") # installs R script as package, use: ar1_model.ar1_model(y0,y1,sub,T,t,c0)
 
@@ -209,21 +228,18 @@ class CrossOverExperiment():
             self._lastfit = "MLM_ar1"
 
         elif self.error_type=="compound":
-            raise ValueError("To be implemented.")
-            # (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-            # for i in tqdm(range(iterations)):
+            raise ValueError("Not yet implemented.")
 
         else:
-            print("WARNING:\n Still running with statsmodels.")
+            print(f"Unknown error type: {self.error_type}. Assuming uncorrelated heteroscedastic errors.")
             for i in tqdm(range(iterations)):
                 (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-                mlm0 = MixedLM(y0,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
-                mlm1 = MixedLM(y1,np.array([np.ones(len(T)),T,t,cO]).T,groups=sub).fit()
-                self.p_values.append(mlm0.pvalues[1])
-                self.null_statistics.append(mlm0.tvalues[1])
-                self.statistics.append(mlm1.tvalues[1])
-                self.estimates.append(mlm1.fe_params[1])
-                self._lastfit = "MLM"
+                p0,t0,t1,fe1 = ar1_model.simple_model(y0,y1,sub,T,t,cO)
+                self.p_values.append(p0)
+                self.null_statistics.append(t0)
+                self.statistics.append(t1)
+                self.estimates.append(fe1)
+            self._lastfit = "MLM_simple"
         self._isfit=True
 
 
