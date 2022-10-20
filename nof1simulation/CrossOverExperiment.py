@@ -220,7 +220,11 @@ class CrossOverExperiment():
         if self.error_type=="ar1":
             for i in tqdm(range(iterations)):
                 (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-                p0,t0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
+                try:
+                    p0,t0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
+                except Exception as e:
+                    print(f"Exception in iteration {i} for {self.params}.",e.message)
+                    continue
                 self.p_values.append(p0)
                 self.null_statistics.append(t0)
                 self.statistics.append(t1)
@@ -234,7 +238,11 @@ class CrossOverExperiment():
             print(f"Unknown error type: {self.error_type}. Assuming uncorrelated heteroscedastic errors.")
             for i in tqdm(range(iterations)):
                 (y0,y1),sub,T,t,cO = self.generate_data(return_for_t=False)
-                p0,t0,t1,fe1 = ar1_model.simple_model(y0,y1,sub,T,t,cO)
+                try:
+                    p0,t0,t1,fe1 = ar1_model.simple_model(y0,y1,sub,T,t,cO)
+                except Exception as e:
+                    print(f"Exception in iteration {i} for {self.params}.",e.message)
+                    continue
                 self.p_values.append(p0)
                 self.null_statistics.append(t0)
                 self.statistics.append(t1)
