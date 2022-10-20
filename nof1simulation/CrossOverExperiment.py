@@ -341,6 +341,7 @@ class RCT():
             iterations (int): Number of iterations in the loop
         """
         self.p_values = []
+        self.null_statistics = []
         self.statistics = []
         self.estimates = []
         for i in tqdm(range(iterations)):
@@ -348,6 +349,7 @@ class RCT():
             t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
             t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
             self.p_values.append(p0)
+            self.null_statistics.append(t_stat0)
             self.statistics.append(t_stat1)
             self.estimates.append(d1.mean())
         self._lastfit = "t_two_sample"
@@ -370,7 +372,7 @@ class RCT():
         bias_std = (np.array(self.estimates)-self.mu).std()
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
         mse_std = ((np.array(self.estimates) - self.mu)**2).std()
-        power = (np.array(self.statistics)>self.get_critical_value()).sum()/len(self.statistics)
+        power = (np.array(self.statistics)>self.get_critical_value(conf=conf)).sum()/len(self.statistics)
         return {"p_value":p_value,"bias":bias,"bias_std":bias_std,"mse":mse,"mse_std":mse_std,"power":power}
 
     def plot_results(self,conf=0.95,**kwargs):
