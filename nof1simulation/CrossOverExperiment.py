@@ -302,6 +302,7 @@ class RCT():
             **kwargs
         }
         self._isfit = False
+     
 
 
     @property
@@ -312,6 +313,8 @@ class RCT():
     def params_(self):
         return self.params
 
+    def get_critical_value(self,conf):
+        return t.ppf(conf,self.subjects-2) # df
 
     def generate_data(self):
         """Generate data for one instance of the design. Can be called in loop to estimate experiment statistics.
@@ -359,13 +362,17 @@ class RCT():
         assert self._isfit==True
         assert conf>0 and conf<1
 
-        critical_t = t.ppf(conf,self.subjects-2) # df 
-
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
-        power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
+        power = (np.array(self.statistics)>self.get_critical_value()).sum()/len(self.statistics)
         return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
+
+    def plot_results(self,conf=0.95,**kwargs):
+        f = sns.displot(self.null_statistics,**kwargs)
+        plt.axvline(x=self.get_critical_value(conf),color="red",ls="--")
+        plt.axvline(x=-self.get_critical_value(conf),color="red",ls="--")
+        return f
 
 
         
