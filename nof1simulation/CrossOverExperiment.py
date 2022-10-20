@@ -260,7 +260,7 @@ class CrossOverExperiment():
 
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
-        bias_std = (np.array(self.estimates-self.mu)).std()
+        bias_std = (np.array(self.estimates)-self.mu).std()
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
         mse_std = ((np.array(self.estimates) - self.mu)**2).std()
         power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
@@ -366,7 +366,7 @@ class RCT():
 
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
-        bias_std = (np.array(self.estimates-self.mu)).std()
+        bias_std = (np.array(self.estimates)-self.mu).std()
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
         mse_std = ((np.array(self.estimates) - self.mu)**2).std()
         power = (np.array(self.statistics)>self.get_critical_value()).sum()/len(self.statistics)
