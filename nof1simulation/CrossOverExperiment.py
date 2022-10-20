@@ -260,9 +260,11 @@ class CrossOverExperiment():
 
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
+        bias_std = (np.array(self.estimates-self.mu)).std()
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
+        mse_std = ((np.array(self.estimates) - self.mu)**2).std()
         power = (np.array(self.statistics)>critical_t).sum()/len(self.statistics)
-        return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
+        return {"p_value":p_value,"bias":bias,"bias_std":bias_std,"mse":mse,"mse_std":mse_std,"power":power}
     
     def plot_results(self,conf=0.95,**kwargs):
         f = sns.displot(self.null_statistics,**kwargs)
@@ -364,9 +366,11 @@ class RCT():
 
         p_value = (np.array(self.p_values)>conf).sum()/len(self.p_values)
         bias = np.array(self.estimates).mean() - self.mu
+        bias_std = (np.array(self.estimates-self.mu)).std()
         mse = ((np.array(self.estimates) - self.mu)**2).mean()
+        mse_std = ((np.array(self.estimates) - self.mu)**2).std()
         power = (np.array(self.statistics)>self.get_critical_value()).sum()/len(self.statistics)
-        return {"p_value":p_value,"bias":bias,"mse":mse,"power":power}
+        return {"p_value":p_value,"bias":bias,"bias_std":bias_std,"mse":mse,"mse_std":mse_std,"power":power}
 
     def plot_results(self,conf=0.95,**kwargs):
         f = sns.displot(self.null_statistics,**kwargs)
