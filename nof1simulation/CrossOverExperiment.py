@@ -1,7 +1,6 @@
 import numpy as np
-from scipy.stats import ttest_1samp, t
+from scipy.stats import t, ttest_rel, ttest_ind
 from tqdm import tqdm
-from statsmodels.api import MixedLM
 
 try:
     import rpy2
@@ -181,7 +180,11 @@ class CrossOverExperiment():
             B_T = T[:,1] - T[:,0] # gives 1 if B_T, -1 if T_B
             diffs0 = (y0[:,1]-y0[:,0]) * B_T
             diffs1 = (y1[:,1]-y1[:,0]) * B_T
-            return diffs0, diffs1
+            # t1 is y1 masked by T, where each row the treated period is taken (using T)
+            t1,b1 = np.where(T[:,0],y1[:,0],y1[:,1]),np.where(T[:,1],y1[:,0],y1[:,1])
+            # same is done here for t0. Tough T is 0, since there might be a linear time trend, we also mask here
+            t0,b0 = np.where(T[:,0],y0[:,0],y0[:,1]),np.where(T[:,1],y0[:,0],y0[:,1])
+            return (t0,b0), (t1,b1)
         else:
             return (y0.ravel(),y1.ravel()),subj.ravel(),T.ravel(),t.ravel(),cO.ravel() #(y0,y1)pTto
 
@@ -196,13 +199,13 @@ class CrossOverExperiment():
         self.statistics = []
         self.estimates = []
         for i in tqdm(range(iterations)):
-            d0,d1 = self.generate_data(return_for_t=True)
-            t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
-            t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
+            (treated0,control0),(treated1,control1) = self.generate_data(return_for_t=True)
+            t_stat0, p0 = ttest_rel(treated0,control0,alternative="two-sided")
+            t_stat1, p1 = ttest_rel(treated1,control1,alternative="two-sided")
             self.p_values.append(p0)
             self.null_statistics.append(t_stat0)
             self.statistics.append(t_stat1)
-            self.estimates.append(d1.mean())
+            self.estimates.append((treated1-control1).mean())
         self._lastfit = "t_paired"
         self._isfit = True
 
@@ -340,7 +343,7 @@ class RCT():
         y1 = c + self.mu*T + alpha + epsilon
         diffs0 = y0[T==1] - y0[T==0]
         diffs1 = y1[T==1] - y1[T==0]
-        return diffs0,diffs1
+        return y0[T==1],y0[T==0],y1[T==1],y1[T==0]
 
     def run_t_test(self,iterations):
         """Loops over experimental design data and computes the ttest pvalue over the independent samples.
@@ -353,13 +356,13 @@ class RCT():
         self.statistics = []
         self.estimates = []
         for i in tqdm(range(iterations)):
-            d0,d1 = self.generate_data()
-            t_stat0, p0 = ttest_1samp(d0,0,alternative="two-sided")
-            t_stat1, p1 = ttest_1samp(d1,0,alternative="two-sided")
+            (treated0,control0),(treated1,control1) = self.generate_data(return_for_t=True)
+            t_stat0, p0 = ttest_ind(treated0,control0,alternative="two-sided")
+            t_stat1, p1 = ttest_ind(treated1,control1,alternative="two-sided")
             self.p_values.append(p0)
             self.null_statistics.append(t_stat0)
             self.statistics.append(t_stat1)
-            self.estimates.append(d1.mean())
+            self.estimates.append((treated1-control1).mean())
         self._lastfit = "t_two_sample"
         self._isfit = True
     
