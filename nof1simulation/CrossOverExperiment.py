@@ -341,9 +341,9 @@ class RCT():
         epsilon = np.random.normal(loc=0,scale=self.epsilon_sd,size=self.subjects)
         y0 = c + alpha + epsilon
         y1 = c + self.mu*T + alpha + epsilon
-        diffs0 = y0[T==1] - y0[T==0]
-        diffs1 = y1[T==1] - y1[T==0]
-        return y0[T==1],y0[T==0],y1[T==1],y1[T==0]
+        #diffs0 = y0[T==1] - y0[T==0]
+        #diffs1 = y1[T==1] - y1[T==0]
+        return (y0[T==1],y0[T==0]),(y1[T==1],y1[T==0])
 
     def run_t_test(self,iterations):
         """Loops over experimental design data and computes the ttest pvalue over the independent samples.
@@ -356,7 +356,7 @@ class RCT():
         self.statistics = []
         self.estimates = []
         for i in tqdm(range(iterations)):
-            (treated0,control0),(treated1,control1) = self.generate_data(return_for_t=True)
+            (treated0,control0),(treated1,control1) = self.generate_data()
             t_stat0, p0 = ttest_ind(treated0,control0,alternative="two-sided")
             t_stat1, p1 = ttest_ind(treated1,control1,alternative="two-sided")
             self.p_values.append(p0)
