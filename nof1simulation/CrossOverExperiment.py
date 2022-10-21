@@ -226,7 +226,7 @@ class CrossOverExperiment():
                 try:
                     p0,t0,t1,fe1 = ar1_model.ar1_model(y0,y1,sub,T,t,cO)
                 except Exception as e:
-                    print(f"Exception in iteration {i} for {self.params}.",e.message)
+                    print(f"Exception in iteration {i} for {self.params}. Skipping")
                     continue
                 self.p_values.append(p0)
                 self.null_statistics.append(t0)
