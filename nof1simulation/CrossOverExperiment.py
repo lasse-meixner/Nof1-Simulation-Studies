@@ -119,16 +119,16 @@ class CrossOverExperiment():
 
     @staticmethod
     # TODO speeding this up???
-    def gen_ar1_error(subjects,periods,rho=0.5):
-        matrix = np.array([np.random.normal(0,1,subjects)])
+    def gen_ar1_error(subjects,periods,sd,rho=0.5):
+        matrix = np.array([np.random.normal(0,scale=sd,size=subjects)])
         for p in range(periods-1):
             next = matrix[-1]*rho + np.random.normal(0,np.sqrt(1-(rho**2)),subjects)
             matrix = np.vstack([matrix,next])
         return matrix
 
     @staticmethod
-    def gen_compound_error(subjects,periods,rho=0.5):
-        first = np.array([np.random.normal(0,1,subjects)])
+    def gen_compound_error(subjects,periods,sd,rho=0.5):
+        first = np.array([np.random.normal(0,scale=sd,size=subjects)])
         rest = np.repeat(first,periods-1,axis=0)*rho + np.random.normal(0,np.sqrt(1-(rho**2)),(periods-1,subjects))
         matrix = np.vstack([first,rest])
         return matrix
@@ -167,9 +167,9 @@ class CrossOverExperiment():
         alpha = np.random.normal(loc=0,scale=self.alpha_sd,size=self.subjects).repeat(self.periods).reshape(-1,2)
         # select correct idiosyncratic error structure
         if self.error_type=="ar1":
-            epsilon = self.gen_ar1_error(self.subjects,self.periods,self.params.get("rho",0.5)).reshape(-1,2)
+            epsilon = self.gen_ar1_error(self.subjects,self.periods,self.epsilon_sd,self.params.get("rho",0.5)).reshape(-1,2)
         elif self.error_type=="compound":
-            epsilon = self.gen_compound_error(self.subjects,self.periods,self.params.get("rho",0.5)).reshape(-1,2)
+            epsilon = self.gen_compound_error(self.subjects,self.periods,self.epsilon_sd,self.params.get("rho",0.5)).reshape(-1,2)
         else:
             epsilon = np.random.normal(loc=0,scale=self.epsilon_sd,size=self.subjects*self.periods).reshape(-1,2)
         # produce outcome for both h0 and h1
